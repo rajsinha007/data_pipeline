@@ -1,0 +1,188 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-connect-s3
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: kafka-connect-s3
+  template:
+    metadata:
+      labels:
+        app: kafka-connect-s3
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: download-s3-plugin
+          image: confluentinc/cp-kafka-connect:7.9.10
+          workingDir: /tmp
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "2Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          command: ["/bin/bash", "-ec"]
+          args:
+            - |
+              set -euo pipefail
+              umask 022
+              # emptyDir survives init-container retries; discard partial extraction.
+              if [ -d /opt/connect-runtime/plugins ]; then
+                chmod -R u+rwX /opt/connect-runtime/plugins
+                rm -rf /opt/connect-runtime/plugins
+              fi
+              mkdir -p /opt/connect-runtime/plugins
+
+              echo 'Downloading S3 connector archive'
+              # Download directly from internal S3, not through a corporate proxy.
+              curl --fail --silent --show-error --location --noproxy '*' \
+                --proto '=https' --proto-redir '=https' \
+                --connect-timeout 20 --max-time 600 --retry 3 \
+                --output /tmp/s3-plugin.tar "$S3_PLUGIN_URL"
+              tar -tf /tmp/s3-plugin.tar > /tmp/s3-plugin-entries
+              if grep -Eq '(^/|(^|/)\.\.(/|$))' /tmp/s3-plugin-entries; then
+                echo 'Archive contains unsafe paths' >&2
+                exit 1
+              fi
+              tar --extract --file=/tmp/s3-plugin.tar \
+                --directory=/opt/connect-runtime/plugins \
+                --no-same-owner --no-same-permissions \
+                --unlink-first --delay-directory-restore
+              plugin_jar="$(find /opt/connect-runtime/plugins -type f \
+                -name 'kafka-connect-s3*.jar' -print -quit)"
+              if [ -z "$plugin_jar" ]; then
+                echo 'Archive does not contain an S3 connector JAR; check its contents' >&2
+                exit 1
+              fi
+              chmod -R a+rX /opt/connect-runtime/plugins
+              rm -f /tmp/s3-plugin.tar /tmp/s3-plugin-entries
+              echo 'S3 connector plugin is ready'
+          env:
+            - name: S3_PLUGIN_URL
+              value: "https://czcho.s3.dhl.com/bs96708-dppc-aiops-hubble-archive/confluentinc-kafka-connect-s3-12.1.13.tar?AWSAccessKeyId=O5FTRH5T3U98NAC04EYV&Expires=1791978421&Signature=dpWGHOHDmhzBRDx31jc%2F66Sep9k%3D"
+          volumeMounts:
+            - name: connect-runtime
+              mountPath: /opt/connect-runtime
+      containers:
+        - name: connect
+          image: confluentinc/cp-kafka-connect:7.9.10
+          workingDir: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: rest
+              containerPort: 8083
+          env:
+            - name: CONNECT_PLUGIN_PATH
+              value: "/usr/share/java,/usr/share/confluent-hub-components,/opt/connect-runtime/plugins"
+            - name: CONNECT_BOOTSTRAP_SERVERS
+              value: "kafka-controller-0.kafka-controller-headless.its-dppc-kafka-prg.svc.cluster.local:9092"
+            - name: CONNECT_SECURITY_PROTOCOL
+              value: "SASL_PLAINTEXT"
+            - name: CONNECT_SASL_MECHANISM
+              value: "SCRAM-SHA-256"
+            - name: CONNECT_SASL_JAAS_CONFIG
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-credentials
+                  key: sasl.jaas.config
+
+            # Sink task consumers require their own security settings.
+            - name: CONNECT_CONSUMER_SECURITY_PROTOCOL
+              value: "SASL_PLAINTEXT"
+            - name: CONNECT_CONSUMER_SASL_MECHANISM
+              value: "SCRAM-SHA-256"
+            - name: CONNECT_CONSUMER_SASL_JAAS_CONFIG
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-credentials
+                  key: sasl.jaas.config
+
+            - name: CONNECT_GROUP_ID
+              value: "s3-connect-cluster"
+            - name: CONNECT_CONFIG_STORAGE_TOPIC
+              value: "_s3-connect-configs"
+            - name: CONNECT_OFFSET_STORAGE_TOPIC
+              value: "_s3-connect-offsets"
+            - name: CONNECT_STATUS_STORAGE_TOPIC
+              value: "_s3-connect-status"
+
+            - name: CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR
+              value: "3"
+            - name: CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR
+              value: "3"
+            - name: CONNECT_STATUS_STORAGE_REPLICATION_FACTOR
+              value: "3"
+
+            - name: CONNECT_KEY_CONVERTER
+              value: "org.apache.kafka.connect.storage.StringConverter"
+            - name: CONNECT_VALUE_CONVERTER
+              value: "org.apache.kafka.connect.json.JsonConverter"
+            - name: CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE
+              value: "false"
+
+            - name: CONNECT_LISTENERS
+              value: "http://0.0.0.0:8083"
+            - name: CONNECT_REST_ADVERTISED_HOST_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: s3-credentials
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: s3-credentials
+                  key: AWS_SECRET_ACCESS_KEY
+
+          volumeMounts:
+            - name: connect-runtime
+              mountPath: /opt/connect-runtime
+              readOnly: true
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "100Mi"
+            limits:
+              cpu: "500m"
+              memory: "2Gi"
+
+          readinessProbe:
+            httpGet:
+              path: /
+              port: rest
+            initialDelaySeconds: 20
+            periodSeconds: 10
+      volumes:
+        - name: connect-runtime
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-connect-s3
+  
+spec:
+  selector:
+    app: kafka-connect-s3
+  ports:
+    - name: rest
+      port: 8083
+      targetPort: rest
+  type: ClusterIP

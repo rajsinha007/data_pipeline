@@ -1,0 +1,6 @@
+# Allowlist the build context: do not send manifests or credentials to the builder.
+**
+!Dockerfile
+!certs/
+!certs/*.pem
+!certs/*.crt

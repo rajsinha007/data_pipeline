@@ -1,0 +1,2 @@
+# Signed download URLs grant access and must not be committed.
+s3-plugin-download-secret.yaml
