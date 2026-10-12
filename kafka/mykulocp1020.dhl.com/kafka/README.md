@@ -149,8 +149,9 @@ can use `KAFKA_SSL_KEY_PASSWORD` supplied securely.
 
 The producer accepts a message, a UTF-8 line file (`--file`), or stdin, and prints
 delivery acknowledgements. The consumer explicitly starts at the earliest retained
-offset of each partition present at startup and keeps listening. It does not commit
-offsets; use it for diagnostics/replay, not unchanged production group processing.
+offset of each partition present at startup and keeps listening; `--max-messages`
+can limit how many records it reads. It does not commit offsets; use it for
+diagnostics/replay, not unchanged production group processing.
 
 ## Certificate renewal
 
