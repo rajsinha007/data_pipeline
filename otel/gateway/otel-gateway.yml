@@ -1,0 +1,76 @@
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: gateway
+  namespace: its-otel-oss
+spec:
+  mode: deployment
+  replicas: 1
+  image: otel/opentelemetry-collector-contrib:0.158.0
+  serviceAccount: otel-agent
+  env:
+    - name: KAFKA_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: kafka-sasl
+          key: username
+    - name: KAFKA_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: kafka-sasl
+          key: password
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  volumes:
+    - name: kafka-mtls
+      secret:
+        secretName: kafka-mtls
+  volumeMounts:
+    - name: kafka-mtls
+      mountPath: /etc/otel/kafka
+      readOnly: true
+  config:
+    receivers:
+      kafka:
+        brokers:
+          - kafka-0-cz.dhl.com:443
+          - kafka-1-cz.dhl.com:443
+          - kafka-2-cz.dhl.com:443
+        metrics:
+          topics: [otel-metrics-json]
+          encoding: otlp_json
+        group_id: otel-gateway-metrics
+        client_id: otel-gateway
+        initial_offset: latest
+        tls:
+          ca_file: /etc/otel/kafka/ca.crt
+          cert_file: /etc/otel/kafka/tls.crt
+          key_file: /etc/otel/kafka/tls.key
+          insecure_skip_verify: false
+        auth:
+          sasl:
+            username: ${env:KAFKA_USERNAME}
+            password: ${env:KAFKA_PASSWORD}
+            mechanism: SCRAM-SHA-512
+    processors:
+      memory_limiter:
+        check_interval: 5s
+        limit_mib: 384
+        spike_limit_mib: 64
+      batch: {}
+    exporters:
+      prometheusremotewrite:
+        endpoint: http://czcholspc003782.prg-dc.dhl.com:9090/api/v1/write
+        resource_to_telemetry_conversion:
+          enabled: true
+    service:
+      pipelines:
+        metrics:
+          receivers: [kafka]
+          processors: [memory_limiter, batch]
+          exporters: [prometheusremotewrite]

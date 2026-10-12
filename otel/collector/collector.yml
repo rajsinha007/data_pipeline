@@ -1,0 +1,218 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: otel-agent
+  namespace: its-otel-oss
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: otel-agent-k8sattributes
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - namespaces
+      - nodes
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources:
+      - replicasets
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: otel-agent-k8sattributes
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: otel-agent-k8sattributes
+subjects:
+  - kind: ServiceAccount
+    name: otel-agent
+    namespace: its-otel-oss
+---
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: agent
+  namespace: its-otel-oss
+spec:
+  mode: daemonset
+  serviceAccount: otel-agent
+  env:
+    - name: K8S_CLUSTER_NAME
+      value: pc2-cilium-cluster-test-pc2
+    - name: DC_REGION
+      value: cz
+    - name: DC_NAME
+      value: Chodov
+    - name: DC_ENVIRONMENT
+      value: test
+    - name: KUBE_NODE_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+    - name: KAFKA_USERNAME
+      valueFrom:
+        secretKeyRef:
+          name: kafka-sasl
+          key: username
+    - name: KAFKA_PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: kafka-sasl
+          key: password
+  hostNetwork: true
+  dnsPolicy: ClusterFirstWithHostNet
+  image: otel/opentelemetry-collector-contrib:latest
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+  volumes:
+    - name: hostfs
+      hostPath:
+        path: /
+        type: Directory
+    - name: kafka-mtls
+      secret:
+        secretName: kafka-mtls
+  volumeMounts:
+    - name: hostfs
+      mountPath: /hostfs
+      readOnly: true
+    - name: kafka-mtls
+      mountPath: /etc/otel/kafka
+      readOnly: true
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+      protocol: TCP
+  config:
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+      hostmetrics:
+        root_path: /hostfs
+        collection_interval: 30s
+        scrapers:
+          cpu: {}
+          memory: {}
+          disk: {}
+          filesystem: {}
+          network: {}
+          load: {}
+      prometheus:
+        config:
+          scrape_configs:
+            - job_name: cilium-hubble
+              scrape_interval: 30s
+              static_configs:
+                - targets: ["localhost:9965"]
+    processors:
+      memory_limiter:
+        check_interval: 5s
+        limit_mib: 192
+        spike_limit_mib: 64
+      resource/node:
+        attributes:
+          - key: k8s.cluster.name
+            value: ${env:K8S_CLUSTER_NAME}
+            action: upsert
+          - key: dc.region
+            value: ${env:DC_REGION}
+            action: upsert
+          - key: dc.name
+            value: ${env:DC_NAME}
+            action: upsert
+          - key: dc.environment
+            value: ${env:DC_ENVIRONMENT}
+            action: upsert
+          - key: host.name
+            value: ${env:KUBE_NODE_NAME}
+            action: upsert
+          - key: k8s.node.name
+            value: ${env:KUBE_NODE_NAME}
+            action: upsert
+      k8sattributes/workload:
+        auth_type: serviceAccount
+        extract:
+          metadata:
+            - k8s.namespace.name
+            - k8s.pod.name
+            - k8s.pod.uid
+            - k8s.deployment.name
+          labels:
+            - from: pod
+              key: team
+              tag_name: team
+            - from: pod
+              key: bu
+              tag_name: bu
+            - from: pod
+              key: cost_center
+              tag_name: cost_center
+        pod_association:
+          - sources:
+              - from: resource_attribute
+                name: k8s.pod.ip
+          - sources:
+              - from: connection
+      batch: {}
+    exporters:
+      otlp/gateway:
+        endpoint: czcholspc003782.prg-dc.dhl.com:4317
+        tls:
+          insecure: true
+      kafka/metrics:
+        brokers:
+          - "kafka-0-cz.dhl.com:443"
+          - "kafka-1-cz.dhl.com:443"
+          - "kafka-2-cz.dhl.com:443"
+        tls:
+          ca_file: /etc/otel/kafka/ca.crt
+          cert_file: /etc/otel/kafka/tls.crt
+          key_file: /etc/otel/kafka/tls.key
+          insecure_skip_verify: false
+        auth:
+          sasl:
+            username: ${env:KAFKA_USERNAME}
+            password: ${env:KAFKA_PASSWORD}
+            mechanism: SCRAM-SHA-512
+        metrics:
+          topic: otel-metrics-json
+          encoding: otlp_json
+    service:
+      pipelines:
+        # traces:
+        #   receivers: [otlp]
+        #   processors: [memory_limiter, batch]
+        #   exporters: [otlp/gateway]
+        metrics:
+          receivers: [otlp, hostmetrics, prometheus]
+          # receivers: [hostmetrics]
+          processors: [memory_limiter, resource/node, batch]
+          exporters: [kafka/metrics]
+          # exporters: [otlp/gateway, kafka/metrics]
+        metrics/otlp-workloads:
+          receivers: [otlp]
+          processors: [memory_limiter, k8sattributes/workload, resource/node, batch]
+          exporters: [kafka/metrics]
+
+        # logs:
+        #   receivers: [otlp]
+        #   processors: [memory_limiter, batch]
+        #   exporters: [otlp/gateway]
