@@ -1,0 +1,84 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: broker-controller
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  replicas: 3
+  roles:
+    - controller
+    - broker
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "500m"
+      memory: 1Gi
+  storage:
+    type: persistent-claim
+    size: 4Gi
+    class: csi-vsphere-block
+    deleteClaim: false
+---
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: kafka
+  annotations:
+    strimzi.io/node-pools: enabled
+    strimzi.io/kraft: enabled
+spec:
+  kafka:
+    listeners:
+      - name: internal
+        port: 9092
+        type: internal
+        # SASL_PLAINTEXT for in-cluster and broker-pod localhost clients.
+        tls: false
+        authentication:
+          type: scram-sha-512
+      - name: external
+        port: 9094
+        type: route
+        tls: true
+        authentication:
+          type: tls
+        configuration:
+          bootstrap:
+            host: kafka-my.dhl.com
+          brokers:
+            - broker: 0
+              host: kafka-0-my.dhl.com
+            - broker: 1
+              host: kafka-1-my.dhl.com
+            - broker: 2
+              host: kafka-2-my.dhl.com
+    authorization:
+      type: simple
+    config:
+      default.replication.factor: 3
+      min.insync.replicas: 2
+      offsets.topic.replication.factor: 3
+      transaction.state.log.replication.factor: 3
+      transaction.state.log.min.isr: 2
+      log.retention.ms: 604800000
+      log.retention.bytes: -1
+  entityOperator:
+    topicOperator:
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+    userOperator:
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
