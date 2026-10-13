@@ -1,5 +1,35 @@
 # Python Kafka client: mutual TLS + SASL
 
+## TLS-only Strimzi consumer
+
+`kafka_tls_consumer.py` uses certificate authentication (`security.protocol=SSL`),
+without SASL. Use it with the Strimzi listener configured with
+`tls: true` and `authentication.type: tls`.
+
+```powershell
+python -m pip install -r requirements.txt
+python kafka_tls_consumer.py --bootstrap-servers kafka-bootstrap-my.dhl.com:443 --topic test-topic
+```
+
+By default, it reads `ca.crt`, `client.crt`, and `client.key` from
+`../my-kafka-certs/my-kafka-certs/`, relative to the script, not the working directory.
+Use `--ca`, `--cert`, and `--key` to override these paths. The corresponding
+`KAFKA_SSL_CA_LOCATION`, `KAFKA_SSL_CERTIFICATE_LOCATION`, and
+`KAFKA_SSL_KEY_LOCATION` environment variables are also supported.
+For Strimzi, use the cluster CA certificate and the TLS KafkaUser's certificate
+and private key, not the broker's private key. Keep private keys out of Git.
+For encrypted keys, supply `KAFKA_SSL_KEY_PASSWORD` securely.
+
+The script explicitly reads every partition present at startup from its earliest
+retained offset, ignoring committed offsets. It prints UTF-8 values with partition
+and offset, then keeps listening until Ctrl+C or `--max-messages` is reached.
+It cannot recover expired/compacted records. Restart to discover newly added partitions.
+All advertised broker hostnames must be reachable, resolve to the correct cluster,
+and match their certificates. Existing external DNS/Route conflicts must be resolved.
+TLS certificate and hostname verification remain enabled.
+
+## Existing SASL client
+
 Uses `confluent-kafka` with `SASL_SSL`, a PEM client certificate/private key,
 broker CA verification and hostname verification. Default SASL mechanism:
 `SCRAM-SHA-512`. No credentials are embedded in the script.

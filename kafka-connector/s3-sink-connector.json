@@ -3,7 +3,7 @@
   "config": {
     "connector.class": "io.confluent.connect.s3.S3SinkConnector",
     "tasks.max": "1",
-    "topics": "otel-metrics-json",
+    "topics": "otel.metrics.czchooct1237",
     "s3.bucket.name": "bs96708-dppc-aiops-mimir-blocks",
     "store.url": "https://czcho.s3.dhl.com",
     "s3.region": "czcho",

@@ -1,74 +1,58 @@
 # OpenTelemetry Kafka-to-Prometheus Gateway
 
-This OpenTelemetry Collector gateway consumes OTLP-JSON metrics from Kafka and writes them to the Prometheus remote-write API. Deploy this gateway after creating the two Kafka Secrets it references.
+This OpenTelemetry Collector gateway consumes OTLP-JSON metrics from the Czech Kafka cluster using its internal SCRAM listener and writes them to the Prometheus remote-write API. Deploy it after provisioning the gateway user and Secret.
 
 ## Data flow
 
-`Kafka topic otel-metrics-json` → Kafka receiver → Prometheus remote write
+`Kafka topic otel.metrics.czchooct1237` → Kafka receiver → Prometheus remote write
 
-The gateway manifest is [otel-gateway.yml](otel-gateway.yml). It expects Kafka SASL/SCRAM-SHA-512 credentials and a client TLS certificate, and writes to the remote-write endpoint configured in that manifest.
+The gateway manifest is [otel-gateway.yml](otel-gateway.yml). It connects to `kafka-kafka-bootstrap.its-dppc-kafka-prg.svc.cluster.local:9092` using `SCRAM-SHA-512` over `SASL_PLAINTEXT`. This connection is authenticated but not encrypted and requires same-cluster network access to Kafka and its advertised brokers.
 
 ## Prerequisites
 
 - `oc` is logged into the target cluster and can create Secrets and deploy the OpenTelemetryCollector in `its-otel-oss`.
 - The OpenTelemetry Operator and the `OpenTelemetryCollector` custom resource are installed.
-- Obtain the Kafka username/password, the Kafka client certificate and matching private key, and the CA certificate that verifies the Kafka broker certificates. The gateway config uses SCRAM-SHA-512 plus mutual TLS.
+- Create the `otel.metrics.czchooct1237` topic. The dedicated [gateway KafkaUser](../../kafka/czchoocp1036.dhl.com/kafka/otel-gateway-user.yaml) grants Read/Describe on this topic and consumer group `otel-gateway-metrics`.
+- The Strimzi User Operator must be available in `its-dppc-kafka-prg`; permission to create KafkaUsers and read its generated Secret is required.
 - Kafka brokers and the Prometheus remote-write endpoint are reachable from the namespace. The Prometheus-compatible destination must accept remote writes at the configured URL.
 - Do not commit credentials, private keys, or populated Secret manifests to source control.
 
-## 1. Create the SASL credential Secret
+## 1. Create the Kafka user and gateway Secret
 
-Use an environment file outside the repository, for example `kafka-sasl.env`, containing exactly these keys:
-
-```text
-username=YOUR_KAFKA_USERNAME
-password=YOUR_KAFKA_PASSWORD
-```
-
-Create or update the Secret in the same namespace as the gateway. In PowerShell, run from the directory containing the environment file:
+Run from this directory. Strimzi generates the password; do not commit it. Secrets cannot be referenced across namespaces, so copy only the password into `its-otel-oss` without printing it or writing it to disk.
 
 ```powershell
-$namespace = "its-otel-oss"
-oc create secret generic kafka-sasl `
-  --from-env-file=.\kafka-sasl.env `
-  --namespace $namespace `
-  --dry-run=client -o yaml | oc apply -f -
+$ErrorActionPreference = 'Stop'
+oc apply -n its-dppc-kafka-prg -f ..\..\kafka\czchoocp1036.dhl.com\kafka\otel-gateway-user.yaml
+if ($LASTEXITCODE -ne 0) { throw 'KafkaUser apply failed' }
+oc wait -n its-dppc-kafka-prg --for=condition=Ready kafkauser/otel-gateway --timeout=120s
+if ($LASTEXITCODE -ne 0) { throw 'KafkaUser is not ready' }
+$source = oc get secret otel-gateway -n its-dppc-kafka-prg -o json | ConvertFrom-Json
+if ($LASTEXITCODE -ne 0 -or -not $source.data.password) { throw 'Generated password is unavailable' }
+@{
+  apiVersion = 'v1'
+  kind = 'Secret'
+  metadata = @{ name = 'otel-gateway'; namespace = 'its-otel-oss' }
+  type = 'Opaque'
+  data = @{ password = $source.data.password }
+} | ConvertTo-Json -Depth 5 | oc apply -f -
+if ($LASTEXITCODE -ne 0) { throw 'Gateway Secret apply failed' }
+Remove-Variable source
 ```
 
-Restrict access to the file and remove it securely when it is no longer needed. Avoid putting actual credentials directly in the command line, where they may be saved in shell history.
+Repeat the Secret copy after password rotation and restart the gateway so its environment uses the new password. Do not remove `kafka-mtls` if the agent still uses it.
 
-## 2. Create the Kafka mTLS Secret
-
-Have the Kafka administrator provide the PEM-encoded CA certificate, client certificate, and matching client private key. The filenames below can be changed, but the Secret data keys must match the gateway's mounted paths: `ca.crt`, `tls.crt`, and `tls.key`.
+## 2. Verify the Secret without printing values
 
 ```powershell
-$namespace = "its-otel-oss"
-oc create secret generic kafka-mtls `
-  --from-file=ca.crt="C:\path\to\kafka-ca.crt" `
-  --from-file=tls.crt="C:\path\to\client.crt" `
-  --from-file=tls.key="C:\path\to\client.key" `
-  --namespace $namespace `
-  --dry-run=client -o yaml | oc apply -f -
+oc describe secret otel-gateway -n its-otel-oss
 ```
 
-The CA must trust the certificates served by the Kafka brokers. The client certificate and private key must be a matching pair and the Kafka listener must authorize that client certificate.
+Expected key: `password`. The command displays key sizes, not values.
 
-## 3. Verify the Secrets without printing values
+## 3. Deploy the gateway
 
-```powershell
-oc get secret kafka-sasl kafka-mtls -n its-otel-oss
-oc get secret kafka-sasl -n its-otel-oss -o go-template='{{range $key, $value := .data}}{{$key}}{{"\n"}}{{end}}'
-oc get secret kafka-mtls -n its-otel-oss -o go-template='{{range $key, $value := .data}}{{$key}}{{"\n"}}{{end}}'
-```
-
-Expected keys:
-
-- `kafka-sasl`: `username`, `password`
-- `kafka-mtls`: `ca.crt`, `tls.crt`, `tls.key`
-
-## 4. Deploy the gateway
-
-Run from this directory after both Secrets exist:
+Run from this directory after the Secret exists:
 
 ```powershell
 oc apply -f .\otel-gateway.yml
@@ -77,7 +61,7 @@ oc get pods -n its-otel-oss -o wide
 oc logs -n its-otel-oss deployment/gateway-collector --all-containers=true --follow
 ```
 
-Check the OpenTelemetryCollector status and collector logs for Kafka authentication/TLS errors, missing Secret keys, or remote-write errors. The gateway deployment's pod needs to be restarted after changing a mounted Secret if the operator does not automatically roll it out.
+Check the OpenTelemetryCollector status and collector logs for Kafka authentication/authorization errors, missing Secret keys, or remote-write errors. After updating the password Secret, run `oc rollout restart deployment/gateway-collector -n its-otel-oss`.
 
 ## Notes
 

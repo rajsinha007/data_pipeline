@@ -1,11 +1,14 @@
 # Kafka Connect S3 Sink Deployment
 
-The manifest deploys a three-replica Kafka Connect cluster and exposes its REST API through a `ClusterIP` Service on port 8083. An init container downloads the S3 connector plugin. The sink definition in `s3-sink-connector.json` writes JSON records from Kafka topic `test1` to the configured S3-compatible bucket and endpoint.
+The manifest deploys a three-replica Kafka Connect cluster and exposes its REST API through a `ClusterIP` Service on port 8083. An init container downloads the S3 connector plugin. The sink definition in `s3-sink-connector.json` writes JSON records from Kafka topic `otel-metrics-json` to the configured S3-compatible bucket and endpoint.
 
 ## Prerequisites
 
 - Deploy into a namespace that can reach Kafka and the S3-compatible endpoint.
-- Create `kafka-credentials` with key `sasl.jaas.config` and `s3-credentials` with keys `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in that namespace.
+- Apply [the connector KafkaUser](../kafka/czchoocp1036.dhl.com/kafka/kafka-connect-s3-user.yaml) in `its-dppc-kafka-prg`. The Strimzi User Operator creates the `kafka-connect-s3` Secret containing `password` and `sasl.jaas.config`; no password should be committed. Deploy this connector in the same namespace so it can reference that Secret.
+- The internal bootstrap address is `kafka-kafka-bootstrap.its-dppc-kafka-prg.svc.cluster.local:9092`, using `SASL_PLAINTEXT` with `SCRAM-SHA-512`. This listener is not encrypted and is intended for internal network access only.
+- The user can read `otel-metrics-json`, manage `_s3-connect-` prefixed internal topics, and use the worker group `s3-connect-cluster` and sink consumer group `connect-s3-sink`. Update its ACLs if the topic, worker group, or connector name changes.
+- Create `s3-credentials` with keys `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in that namespace.
 - Ensure the plugin download URL configured in `manifest.yaml` is valid. Avoid committing presigned URLs or credentials; keep them in Kubernetes Secrets.
 
 ## Deploy

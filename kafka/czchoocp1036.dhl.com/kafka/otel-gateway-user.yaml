@@ -26,3 +26,10 @@ spec:
         operations:
           - Read
           - Describe
+      - resource:
+          type: group
+          name: otel-s3-metrics
+          patternType: literal
+        operations:
+          - Read
+          - Describe
