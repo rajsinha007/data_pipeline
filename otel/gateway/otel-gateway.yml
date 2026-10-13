@@ -8,13 +8,25 @@ spec:
   replicas: 1
   image: otel/opentelemetry-collector-contrib:0.158.0
   serviceAccount: otel-agent
+  env:
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: s3-credentials
+          key: AWS_ACCESS_KEY_ID
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: s3-credentials
+          key: AWS_SECRET_ACCESS_KEY
+
   resources:
     requests:
       cpu: 100m
       memory: 256Mi
     limits:
       cpu: 500m
-      memory: 512Mi
+      memory: 2Gi
   volumes:
     - name: kafka-mtls
       secret:
@@ -36,6 +48,20 @@ spec:
         group_id: otel-gateway-metrics
         client_id: otel-gateway
         initial_offset: latest
+        autocommit:
+          enable: true
+          interval: 1s
+        # No asynchronous batch/queue: mark only after synchronous export succeeds.
+        message_marking:
+          after: true
+          on_error: false
+          on_permanent_error: false
+        # Keep failed messages uncommitted and retry processing automatically.
+        error_backoff:
+          enabled: true
+          initial_interval: 1s
+          max_interval: 30s
+          max_elapsed_time: 0s
         tls:
           ca_file: /etc/otel/kafka/ca.crt
           cert_file: /etc/otel/kafka/tls.crt
@@ -46,15 +72,19 @@ spec:
         check_interval: 5s
         limit_mib: 384
         spike_limit_mib: 64
-      batch: {}
     exporters:
       prometheusremotewrite:
         endpoint: http://czcholspc003782.prg-dc.dhl.com:9090/api/v1/write
+        # Disabling the queue makes HTTP delivery part of receiver processing.
+        remote_write_queue:
+          enabled: false
+        max_batch_request_parallelism: 1
+        timeout: 30s
         resource_to_telemetry_conversion:
           enabled: true
     service:
       pipelines:
         metrics:
           receivers: [kafka]
-          processors: [memory_limiter, batch]
+          processors: [memory_limiter]
           exporters: [prometheusremotewrite]

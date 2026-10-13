@@ -18,7 +18,7 @@ spec:
       memory: 1Gi
   storage:
     type: persistent-claim
-    size: 4Gi
+    size: 16Gi
     class: csi-vsphere-block
     deleteClaim: false
 ---

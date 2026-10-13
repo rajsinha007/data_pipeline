@@ -1,0 +1,4 @@
+# Keep local certificates and private keys out of Git.
+*
+!.gitignore
+!README.md
