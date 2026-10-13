@@ -10,6 +10,7 @@ not the legacy Bitnami Helm chart. It does not migrate data from that deployment
 | [kafka.yaml](kafka.yaml) | Kafka `kafka` and three-node KafkaNodePool `broker-controller` |
 | [admin-user.yaml](admin-user.yaml) | TLS KafkaUser `admin` and topic/group ACLs |
 | [test-topic.yaml](test-topic.yaml) | KafkaTopic `test-topic`: three partitions, three replicas, minimum ISR two, seven-day retention |
+| [otel-metrics-topic.yaml](otel-metrics-topic.yaml) | KafkaTopic `otel.metrics.czchooct1237`: three partitions, three replicas, minimum ISR two, seven-day retention |
 
 All manifests omit `metadata.namespace`. The commands below explicitly use
 `its-dppc-kafka-kul`; use the same namespace for all resources and configure the
@@ -63,6 +64,8 @@ oc apply -n its-dppc-kafka-kul -f admin-user.yaml
 oc wait kafkauser/admin -n its-dppc-kafka-kul --for=condition=Ready --timeout=300s
 oc apply -n its-dppc-kafka-kul -f test-topic.yaml
 oc wait kafkatopic/test-topic -n its-dppc-kafka-kul --for=condition=Ready --timeout=300s
+oc apply -n its-dppc-kafka-kul -f otel-metrics-topic.yaml
+oc wait kafkatopic/otel.metrics.czchooct1237 -n its-dppc-kafka-kul --for=condition=Ready --timeout=300s
 oc get kafkanodepool,kafka,kafkauser,kafkatopic,pods,pvc,route -n its-dppc-kafka-kul
 ```
 

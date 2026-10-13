@@ -1,0 +1,28 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: otel-gateway
+  namespace: its-dppc-kafka-prg
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: otel.metrics.czchooct1237
+          patternType: literal
+        operations:
+          - Read
+          - Write
+          - Describe
+      - resource:
+          type: group
+          name: otel-gateway-metrics
+          patternType: literal
+        operations:
+          - Read
+          - Describe

@@ -1,0 +1,46 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: kafka-connect-s3
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  authentication:
+    type: scram-sha-512
+  authorization:
+    type: simple
+    acls:
+      # Kafka Connect worker configuration, offset, and status topics.
+      - resource:
+          type: topic
+          name: _s3-connect-
+          patternType: prefix
+        operations:
+          - Read
+          - Write
+          - Describe
+          - Create
+      # Source topic consumed by the S3 sink.
+      - resource:
+          type: topic
+          name: otel.metrics.czchooct1237
+          patternType: literal
+        operations:
+          - Read
+          - Describe
+      # Distributed Kafka Connect worker group.
+      - resource:
+          type: group
+          name: s3-connect-cluster
+          patternType: literal
+        operations:
+          - Read
+          - Describe
+      # Default consumer group for the connector named s3-sink.
+      - resource:
+          type: group
+          name: connect-s3-sink
+          patternType: literal
+        operations:
+          - Read
+          - Describe

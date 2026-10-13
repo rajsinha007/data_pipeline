@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: kafka-connect-s3
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: kafka-connect-s3
@@ -88,26 +88,26 @@ spec:
             - name: CONNECT_PLUGIN_PATH
               value: "/usr/share/java,/usr/share/confluent-hub-components,/opt/connect-runtime/plugins"
             - name: CONNECT_BOOTSTRAP_SERVERS
-              value: "kafka-controller-0.kafka-controller-headless.its-dppc-kafka-prg.svc.cluster.local:9092"
+              value: "kafka-kafka-bootstrap.its-dppc-kafka-prg.svc.cluster.local:9092"
             - name: CONNECT_SECURITY_PROTOCOL
               value: "SASL_PLAINTEXT"
             - name: CONNECT_SASL_MECHANISM
-              value: "SCRAM-SHA-256"
+              value: "SCRAM-SHA-512"
             - name: CONNECT_SASL_JAAS_CONFIG
               valueFrom:
                 secretKeyRef:
-                  name: kafka-credentials
+                  name: kafka-connect-s3
                   key: sasl.jaas.config
 
             # Sink task consumers require their own security settings.
             - name: CONNECT_CONSUMER_SECURITY_PROTOCOL
               value: "SASL_PLAINTEXT"
             - name: CONNECT_CONSUMER_SASL_MECHANISM
-              value: "SCRAM-SHA-256"
+              value: "SCRAM-SHA-512"
             - name: CONNECT_CONSUMER_SASL_JAAS_CONFIG
               valueFrom:
                 secretKeyRef:
-                  name: kafka-credentials
+                  name: kafka-connect-s3
                   key: sasl.jaas.config
 
             - name: CONNECT_GROUP_ID
