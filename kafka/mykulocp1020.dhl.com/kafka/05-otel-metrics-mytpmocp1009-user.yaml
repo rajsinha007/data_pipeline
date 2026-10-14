@@ -1,32 +1,24 @@
----
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaUser
 metadata:
-  name: admin
+  name: otel-mytpmocp1009
   labels:
     strimzi.io/cluster: kafka
 spec:
   authentication:
-    type: scram-sha-512
+    type: tls
   authorization:
     type: simple
     acls:
       - resource:
           type: topic
-          name: '*'
+          name: otel.metrics.mytpmocp1009
           patternType: literal
         operations:
-          - Read
           - Write
           - Describe
-          - DescribeConfigs
-          - Create
+      # Required for producers using idempotent delivery.
       - resource:
-          type: group
-          name: '*'
-          patternType: literal
+          type: cluster
         operations:
-          - Read
-          - Write
-          - Describe
-          - Create
+          - IdempotentWrite

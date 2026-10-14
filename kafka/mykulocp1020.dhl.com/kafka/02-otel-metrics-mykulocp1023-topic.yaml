@@ -1,11 +1,11 @@
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaTopic
 metadata:
-  name: test-topic
+  name: otel.metrics.mykulocp1023
   labels:
     strimzi.io/cluster: kafka
 spec:
-  partitions: 3
+  partitions: 1
   replicas: 3
   config:
     min.insync.replicas: 2

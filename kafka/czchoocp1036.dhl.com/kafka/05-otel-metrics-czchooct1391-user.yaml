@@ -1,0 +1,25 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: otel-czchooct1391
+  namespace: its-dppc-kafka-prg
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: otel.metrics.czchooct1391
+          patternType: literal
+        operations:
+          - Write
+          - Describe
+      # Required for producers using idempotent delivery.
+      - resource:
+          type: cluster
+        operations:
+          - IdempotentWrite

@@ -1,8 +1,8 @@
----
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaUser
 metadata:
-  name: admin
+  name: otel-czstlocp1025
+  namespace: its-dppc-kafka-prg
   labels:
     strimzi.io/cluster: kafka
 spec:
@@ -13,19 +13,13 @@ spec:
     acls:
       - resource:
           type: topic
-          name: '*'
+          name: otel.metrics.czstlocp1025
           patternType: literal
         operations:
-          - Read
           - Write
           - Describe
-          - Create
+      # Required for producers using idempotent delivery.
       - resource:
-          type: group
-          name: '*'
-          patternType: literal
+          type: cluster
         operations:
-          - Read
-          - Write
-          - Describe
-          - Create
+          - IdempotentWrite

@@ -1,7 +1,7 @@
 apiVersion: kafka.strimzi.io/v1
 kind: KafkaUser
 metadata:
-  name: otel-gateway
+  name: otel-czchoocp1038
   namespace: its-dppc-kafka-prg
   labels:
     strimzi.io/cluster: kafka
@@ -13,23 +13,13 @@ spec:
     acls:
       - resource:
           type: topic
-          name: otel.metrics.czchooct1237
+          name: otel.metrics.czchoocp1038
           patternType: literal
         operations:
-          - Read
           - Write
           - Describe
+      # Required for producers using idempotent delivery.
       - resource:
-          type: group
-          name: otel-gateway-metrics
-          patternType: literal
+          type: cluster
         operations:
-          - Read
-          - Describe
-      - resource:
-          type: group
-          name: otel-s3-metrics
-          patternType: literal
-        operations:
-          - Read
-          - Describe
+          - IdempotentWrite

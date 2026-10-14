@@ -1,0 +1,24 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: otel-mykulocp1023
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: otel.metrics.mykulocp1023
+          patternType: literal
+        operations:
+          - Write
+          - Describe
+      # Required for producers using idempotent delivery.
+      - resource:
+          type: cluster
+        operations:
+          - IdempotentWrite
