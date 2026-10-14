@@ -18,9 +18,19 @@ spec:
       memory: 1Gi
   storage:
     type: persistent-claim
-    size: 16Gi
+    size: 12Gi
     class: csi-vsphere-block
     deleteClaim: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-metrics
+data:
+  metrics-config.yml: |
+    lowercaseOutputName: true
+    rules:
+      - pattern: ".*"
 ---
 apiVersion: kafka.strimzi.io/v1
 kind: Kafka
@@ -30,6 +40,16 @@ metadata:
     strimzi.io/node-pools: enabled
     strimzi.io/kraft: enabled
 spec:
+  kafkaExporter:
+    topicRegex: ".*"
+    groupRegex: ".*"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
   kafka:
     listeners:
       - name: internal
@@ -55,6 +75,12 @@ spec:
               host: kafka-1-cz.dhl.com
             - broker: 2
               host: kafka-2-cz.dhl.com
+    metricsConfig:
+      type: jmxPrometheusExporter
+      valueFrom:
+        configMapKeyRef:
+          name: kafka-metrics
+          key: metrics-config.yml
     authorization:
       type: simple
     config:

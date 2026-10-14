@@ -12,6 +12,13 @@ metadata:
 spec:
   mode: daemonset
   serviceAccount: otel-agent
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule
   env:
     - name: K8S_CLUSTER_NAME
       value: czchooct1237
@@ -33,6 +40,7 @@ spec:
       cpu: 50m
       memory: 128Mi
     limits:
+      cpu: 500m
       memory: 256Mi
   volumes:
     - name: hostfs

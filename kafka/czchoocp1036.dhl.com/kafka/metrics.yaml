@@ -1,0 +1,125 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-metrics-broker-0
+  namespace: its-dppc-kafka-prg
+spec:
+  selector:
+    strimzi.io/pod-name: kafka-broker-controller-0
+  ports:
+    - name: metrics
+      port: 9404
+      targetPort: 9404
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: kafka-metrics-broker-0
+  namespace: its-dppc-kafka-prg
+  annotations:
+    haproxy.router.openshift.io/ip_whitelist: "<approved-scraper-IP-or-CIDR>"
+spec:
+  to:
+    kind: Service
+    name: kafka-metrics-broker-0
+  port:
+    targetPort: metrics
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+---
+# Kafka Exporter metrics endpoint. Keep in sync with the Strimzi-generated
+# kafka-kafka-exporter Deployment, which listens on port 9404.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-exporter-metrics
+  namespace: its-dppc-kafka-prg
+  labels:
+    app: kafka-exporter-metrics
+spec:
+  selector:
+    strimzi.io/name: kafka-kafka-exporter
+  ports:
+    - name: metrics
+      port: 9404
+      targetPort: tcp-prometheus
+      protocol: TCP
+---
+# HTTPS route for Prometheus scraping. Metrics are unauthenticated; restrict
+# access to trusted scraper networks using the approved cluster policy.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: kafka-exporter-metrics
+  namespace: its-dppc-kafka-prg
+spec:
+  to:
+    kind: Service
+    name: kafka-exporter-metrics
+  port:
+    targetPort: metrics
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: None
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-metrics-broker-1
+  namespace: its-dppc-kafka-prg
+spec:
+  selector:
+    strimzi.io/pod-name: kafka-broker-controller-1
+  ports:
+    - name: metrics
+      port: 9404
+      targetPort: 9404
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: kafka-metrics-broker-1
+  namespace: its-dppc-kafka-prg
+  annotations:
+    haproxy.router.openshift.io/ip_whitelist: "<approved-scraper-IP-or-CIDR>"
+spec:
+  to:
+    kind: Service
+    name: kafka-metrics-broker-1
+  port:
+    targetPort: metrics
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-metrics-broker-2
+  namespace: its-dppc-kafka-prg
+spec:
+  selector:
+    strimzi.io/pod-name: kafka-broker-controller-2
+  ports:
+    - name: metrics
+      port: 9404
+      targetPort: 9404
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: kafka-metrics-broker-2
+  namespace: its-dppc-kafka-prg
+  annotations:
+    haproxy.router.openshift.io/ip_whitelist: "<approved-scraper-IP-or-CIDR>"
+spec:
+  to:
+    kind: Service
+    name: kafka-metrics-broker-2
+  port:
+    targetPort: metrics
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
