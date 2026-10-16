@@ -1,0 +1,51 @@
+apiVersion: flink.apache.org/v1beta1
+kind: FlinkDeployment
+metadata:
+  name: otlp-prometheus
+spec:
+  image: REGISTRY/otlp-prometheus-job:0.1.0
+  flinkVersion: v2_2
+  serviceAccount: flink
+  flinkConfiguration:
+    taskmanager.numberOfTaskSlots: "2"
+    restart-strategy.type: exponential-delay
+    env.java.opts.all: -Dorg.xerial.snappy.tempdir=/tmp
+  jobManager:
+    resource:
+      cpu: 0.5
+      memory: 1024m
+  taskManager:
+    resource:
+      cpu: 1
+      memory: 2048m
+  job:
+    jarURI: local:///opt/flink/usrlib/otlp-prometheus-job.jar
+    parallelism: 2
+    upgradeMode: stateless
+  podTemplate:
+    spec:
+      containers:
+        - name: flink-main-container
+          env:
+            - name: PROMETHEUS_REMOTE_WRITE_URL
+              value: http://czcholspc003782.prg-dc.dhl.com:9090/api/v1/write
+            - name: KAFKA_MY_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: kafka-mtls-my, key: keystore-password}
+            - name: KAFKA_MY_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: kafka-mtls-my, key: truststore-password}
+            - name: KAFKA_CZ_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: kafka-mtls-cz, key: keystore-password}
+            - name: KAFKA_CZ_TRUSTSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: kafka-mtls-cz, key: truststore-password}
+          volumeMounts:
+            - {name: kafka-mtls-my, mountPath: /etc/flink/kafka/my, readOnly: true}
+            - {name: kafka-mtls-cz, mountPath: /etc/flink/kafka/cz, readOnly: true}
+      volumes:
+        - name: kafka-mtls-my
+          secret: {secretName: kafka-mtls-my}
+        - name: kafka-mtls-cz
+          secret: {secretName: kafka-mtls-cz}

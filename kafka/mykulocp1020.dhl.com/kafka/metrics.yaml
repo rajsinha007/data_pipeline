@@ -1,0 +1,122 @@
+# Metrics Services and HTTPS Routes. Apply in namespace its-dppc-kafka-kul.
+# Metrics are unauthenticated; allow access only from trusted scrapers.
+# Replace each Route's loopback-only allowlist with approved scraper IPs/CIDRs.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-metrics-broker-0
+spec:
+  selector:
+    strimzi.io/cluster: kafka
+    strimzi.io/pod-name: kafka-broker-controller-0
+  ports:
+    - name: metrics
+      port: 9404
+      targetPort: 9404
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-metrics-broker-1
+spec:
+  selector:
+    strimzi.io/cluster: kafka
+    strimzi.io/pod-name: kafka-broker-controller-1
+  ports:
+    - name: metrics
+      port: 9404
+      targetPort: 9404
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-metrics-broker-2
+spec:
+  selector:
+    strimzi.io/cluster: kafka
+    strimzi.io/pod-name: kafka-broker-controller-2
+  ports:
+    - name: metrics
+      port: 9404
+      targetPort: 9404
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-exporter-metrics
+spec:
+  selector:
+    strimzi.io/cluster: kafka
+    strimzi.io/name: kafka-kafka-exporter
+  ports:
+    - name: metrics
+      port: 9404
+      targetPort: tcp-prometheus
+      protocol: TCP
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: kafka-metrics-broker-0
+  # annotations:
+  #   haproxy.router.openshift.io/ip_whitelist: "127.0.0.1/32"
+spec:
+  to:
+    kind: Service
+    name: kafka-metrics-broker-0
+  port:
+    targetPort: metrics
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: None
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: kafka-metrics-broker-1
+  # annotations:
+  #   haproxy.router.openshift.io/ip_whitelist: "127.0.0.1/32"
+spec:
+  to:
+    kind: Service
+    name: kafka-metrics-broker-1
+  port:
+    targetPort: metrics
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: None
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: kafka-metrics-broker-2
+  # annotations:
+  #   haproxy.router.openshift.io/ip_whitelist: "127.0.0.1/32"
+spec:
+  to:
+    kind: Service
+    name: kafka-metrics-broker-2
+  port:
+    targetPort: metrics
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: None
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: kafka-exporter-metrics
+  # annotations:
+  #   haproxy.router.openshift.io/ip_whitelist: "127.0.0.1/32"
+spec:
+  to:
+    kind: Service
+    name: kafka-exporter-metrics
+  port:
+    targetPort: metrics
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: None

@@ -116,7 +116,7 @@ spec:
           key_file: /etc/otel/kafka/tls.key
           insecure_skip_verify: false
         metrics:
-          topic: otel.metrics.czchooct1237
+          topic: otel.metrics.mykulocp1023
           encoding: otlp_json
     service:
       pipelines:

@@ -76,6 +76,76 @@ and `kafka-broker-controller-2`. The manifest's broker hosts assume IDs 0–2;
 verify actual node IDs before modifying the node pool. Renaming a cluster/pool
 creates different identities, not an in-place rename. New topics initially have no records.
 
+## JMX and Kafka Exporter metrics
+
+[01-kafka.yaml](01-kafka.yaml) enables both exporters:
+
+- Broker JMX Exporter on port **9404**, using ConfigMap `kafka-metrics` and
+	`metrics-config.yml`. The generic rules match the Czech cluster's configuration.
+- Kafka Exporter on port **9404**, collecting all topics and consumer groups.
+	It requests 100m CPU / 128 MiB and limits 200m CPU / 256 MiB; ensure quota
+	has capacity for the additional pod.
+
+[metrics.yaml](metrics.yaml) creates internal Services for all three brokers
+and the Kafka Exporter, plus four HTTPS edge-terminated Routes. Plain HTTP
+access is disabled. Route hostnames are assigned by OpenShift.
+
+**Before applying**, replace all four `haproxy.router.openshift.io/ip_whitelist`
+values (`127.0.0.1/32`) with approved Prometheus scraper source IPs/CIDRs, separated
+by spaces. The loopback-only default intentionally blocks remote scrapers.
+Use the source address seen by the ingress router (which may be NATed), and
+verify the restriction works with your cluster's ingress configuration. These
+metrics endpoints have no authentication; do not remove access restrictions.
+
+Apply while logged into the **Malaysia** OpenShift cluster:
+
+```powershell
+oc apply -n its-dppc-kafka-kul -f 01-kafka.yaml
+oc wait kafka/kafka -n its-dppc-kafka-kul --for=condition=Ready --timeout=600s
+oc apply -n its-dppc-kafka-kul -f metrics.yaml
+oc get routes -n its-dppc-kafka-kul kafka-metrics-broker-0 kafka-metrics-broker-1 kafka-metrics-broker-2 kafka-exporter-metrics
+oc get pods -n its-dppc-kafka-kul -l strimzi.io/name=kafka-kafka-exporter
+oc get endpoints -n its-dppc-kafka-kul kafka-metrics-broker-0 kafka-metrics-broker-1 kafka-metrics-broker-2 kafka-exporter-metrics
+```
+
+Enabling broker metrics may trigger a rolling restart. Verify broker IDs and
+pod labels match the Service selectors; an empty endpoint list indicates a
+selector mismatch or a pod that is not ready.
+
+Configure your in-cluster Prometheus to scrape `/metrics` over HTTP on port
+9404 at each of these Service DNS names:
+
+- `kafka-metrics-broker-0.its-dppc-kafka-kul.svc`
+- `kafka-metrics-broker-1.its-dppc-kafka-kul.svc`
+- `kafka-metrics-broker-2.its-dppc-kafka-kul.svc`
+- `kafka-exporter-metrics.its-dppc-kafka-kul.svc`
+
+Use job `kafka-jmx` for the broker targets and a distinct job for Kafka Exporter.
+Attach a cluster label such as `cluster="mykulocp1020"` to distinguish these
+series from Czech cluster metrics. Services alone do not configure Prometheus
+scraping; add scrape configuration or matching ServiceMonitors separately.
+NetworkPolicies must permit the scraper to reach port 9404 while restricting
+untrusted clients. For external Prometheus, scrape each assigned Route hostname
+on port **443**, with `scheme: https` and `metrics_path: /metrics`. Trust the
+ingress certificate's CA; do not disable TLS verification. Edge termination
+encrypts client-to-router traffic; router-to-Service traffic is HTTP. Ensure
+NetworkPolicies allow ingress router traffic to the metrics Services if needed.
+
+To inspect an endpoint locally, run one of these port-forwards, then access
+`http://localhost:9404/metrics` while it is active:
+
+```powershell
+oc port-forward -n its-dppc-kafka-kul svc/kafka-metrics-broker-0 9404:9404
+# Alternatively, stop the previous port-forward and inspect Kafka Exporter:
+oc port-forward -n its-dppc-kafka-kul svc/kafka-exporter-metrics 9404:9404
+```
+
+JMX exposes broker traffic counters such as `kafka_server_brokertopicmetrics_count`
+(inspect the `name` and `topic` labels). Kafka Exporter exposes partition offsets
+such as `kafka_topic_partition_current_offset` and consumer-group lag such as
+`kafka_consumergroup_lag`. Actual series depend on broker activity and exporter
+version; absent ingress series do not imply zero traffic.
+
 ## Client configuration
 
 ```properties

@@ -1,0 +1,41 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaUser
+metadata:
+  name: flink-admin
+  namespace: its-dppc-kafka-kul
+  labels:
+    strimzi.io/cluster: kafka
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    # Broad administrative access requested for Flink setup.
+    # Narrow these permissions before routine production use.
+    acls:
+      - resource:
+          type: topic
+          name: "*"
+          patternType: literal
+        operations:
+          - All
+        host: "*"
+      - resource:
+          type: group
+          name: "*"
+          patternType: literal
+        operations:
+          - All
+        host: "*"
+      - resource:
+          type: transactionalId
+          name: "*"
+          patternType: literal
+        operations:
+          - All
+        host: "*"
+      - resource:
+          type: cluster
+        operations:
+          - All
+        host: "*"

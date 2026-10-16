@@ -11,14 +11,14 @@ spec:
     - broker
   resources:
     requests:
-      cpu: 200m
-      memory: 512Mi
+      cpu: 3
+      memory: 4Gi
     limits:
-      cpu: "500m"
-      memory: 1Gi
+      cpu: "6"
+      memory: 8Gi
   storage:
     type: persistent-claim
-    size: 12Gi
+    size: 64Gi
     class: csi-vsphere-block
     deleteClaim: false
 ---
