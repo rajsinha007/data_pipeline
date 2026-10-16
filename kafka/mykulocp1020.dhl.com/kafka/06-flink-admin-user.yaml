@@ -2,7 +2,6 @@ apiVersion: kafka.strimzi.io/v1
 kind: KafkaUser
 metadata:
   name: flink-admin
-  namespace: its-dppc-kafka-kul
   labels:
     strimzi.io/cluster: kafka
 spec:
